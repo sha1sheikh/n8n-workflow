@@ -1,0 +1,255 @@
+{
+  "name": "New Client Onboarding",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Assumption: incoming webhook payload shape\n\nThis workflow assumes the e-signature tool / CRM automation (e.g. PandaDoc, DocuSign, HelloSign) POSTs a JSON body shaped like:\n\n```json\n{\n  \"clientName\": \"Jane Doe\",\n  \"clientEmail\": \"jane@example.com\",\n  \"companyName\": \"Acme Inc\",\n  \"dealValue\": \"12000\",\n  \"proposalId\": \"PROP-1234\"\n}\n```\n\nThe real payload shape depends on which e-signature/CRM tool you use. If your tool nests these fields differently (e.g. under `data`, `document`, or a webhook envelope), update the **Normalize Client Data** node's expressions accordingly.",
+        "height": 380,
+        "width": 420,
+        "color": 6
+      },
+      "id": "affea69f-00aa-4d02-a184-4d839c69d68a",
+      "name": "Sticky Note - Payload Assumption",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Placeholders to replace before use\n\n1. **Create Client Folder** node -> Parent Folder = `REPLACE_WITH_PARENT_FOLDER_ID`\n2. **Send Welcome Email** node -> onboarding doc links marked `REPLACE ME`\n3. **Create Onboarding Card** node -> List ID = `REPLACE_WITH_TRELLO_LIST_ID`\n4. **Announce New Client** node -> Channel = `REPLACE_WITH_CHANNEL` (suggested default: #new-clients)\n\nAlso attach your own Google Drive, Gmail, Trello, and Slack credentials to the respective nodes - none are pre-configured.\n\nNote: the Trello card link used in the Slack message assumes the Trello API response includes a `url` field on the created card (standard Trello REST API behavior).",
+        "height": 420,
+        "width": 460,
+        "color": 4
+      },
+      "id": "e9ea43c4-efa3-4335-a0b4-5979ef285150",
+      "name": "Sticky Note - Placeholders",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -180,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposal-signed",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "76db06a5-99da-44bb-a429-3440f3ec56f9",
+      "name": "Proposal Signed Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        280,
+        300
+      ],
+      "webhookId": "proposal-signed-onboarding"
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "629243af-df43-4d65-969e-6227943469bf",
+              "name": "clientName",
+              "type": "string",
+              "value": "={{ $json.body.clientName }}"
+            },
+            {
+              "id": "8cf17aa2-ef64-405a-9fe5-ef0b5dd173d9",
+              "name": "clientEmail",
+              "type": "string",
+              "value": "={{ $json.body.clientEmail }}"
+            },
+            {
+              "id": "90e04a8e-c645-406c-a510-ca58c03b317b",
+              "name": "companyName",
+              "type": "string",
+              "value": "={{ $json.body.companyName }}"
+            },
+            {
+              "id": "ee7535bb-aaa8-453e-9734-947e55c48d8a",
+              "name": "dealValue",
+              "type": "string",
+              "value": "={{ $json.body.dealValue }}"
+            },
+            {
+              "id": "54c1eb17-a305-4b5a-af03-5e20ea6309ce",
+              "name": "proposalId",
+              "type": "string",
+              "value": "={{ $json.body.proposalId }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a10c08c3-787b-4ac0-a7c4-2cef852a940b",
+      "name": "Normalize Client Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.companyName }} - Onboarding",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_PARENT_FOLDER_ID",
+          "cachedResultName": "REPLACE_WITH_PARENT_FOLDER_ID (placeholder - select real folder in n8n UI)"
+        },
+        "options": {}
+      },
+      "id": "1d60f24f-2621-4589-998f-b14faf77a68a",
+      "name": "Create Client Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $('Normalize Client Data').item.json.clientEmail }}",
+        "subject": "=Welcome aboard, {{ $('Normalize Client Data').item.json.clientName }}!",
+        "emailType": "html",
+        "message": "=<p>Hi {{ $('Normalize Client Data').item.json.clientName }},</p>\n<p>Welcome to <strong>{{ $('Normalize Client Data').item.json.companyName }}</strong> onboarding! We're excited to get started.</p>\n<p>Your dedicated onboarding folder is ready here: <a href=\"{{ $json.webViewLink }}\">{{ $json.webViewLink }}</a></p>\n<p>A few resources to help you get going:</p>\n<ul>\n<li><a href=\"https://REPLACE-ME.example.com/getting-started\">Getting Started Guide (REPLACE ME)</a></li>\n<li><a href=\"https://REPLACE-ME.example.com/kickoff-checklist\">Kickoff Checklist (REPLACE ME)</a></li>\n</ul>\n<p>Talk soon,<br/>The Team</p>",
+        "options": {}
+      },
+      "id": "80f3c216-a7d2-4117-add5-c4657eedabf5",
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "apiKey",
+        "resource": "card",
+        "operation": "create",
+        "listId": "REPLACE_WITH_TRELLO_LIST_ID",
+        "name": "={{ $('Normalize Client Data').item.json.companyName }} - Onboarding",
+        "description": "=New client onboarding task.\n\nProposal ID: {{ $('Normalize Client Data').item.json.proposalId }}\nDeal Value: {{ $('Normalize Client Data').item.json.dealValue }}\nOnboarding folder: {{ $('Create Client Folder').item.json.webViewLink }}",
+        "additionalFields": {}
+      },
+      "id": "7aab3d47-1d61-447e-9c17-92683b1ec847",
+      "name": "Create Onboarding Card",
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "REPLACE_WITH_CHANNEL",
+          "cachedResultName": "REPLACE_WITH_CHANNEL (placeholder - default suggestion #new-clients)"
+        },
+        "messageType": "text",
+        "text": "=:tada: New client onboarding started!\n\n*Company:* {{ $('Normalize Client Data').item.json.companyName }}\n*Deal Value:* {{ $('Normalize Client Data').item.json.dealValue }}\n*Onboarding folder:* {{ $('Create Client Folder').item.json.webViewLink }}\n*Trello card:* {{ $json.url }}",
+        "otherOptions": {}
+      },
+      "id": "77d30356-b604-42e0-b802-aab2433ecb37",
+      "name": "Announce New Client",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1380,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Proposal Signed Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Client Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Client Data": {
+      "main": [
+        [
+          {
+            "node": "Create Client Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Client Folder": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Welcome Email": {
+      "main": [
+        [
+          {
+            "node": "Create Onboarding Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Onboarding Card": {
+      "main": [
+        [
+          {
+            "node": "Announce New Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
